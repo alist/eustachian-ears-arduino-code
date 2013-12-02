@@ -43,6 +43,22 @@ int motorRelayPin = D11;
 int pressureSensorA2DPin = A0;
 int sonotubometryAmplitudeSensorA2DPin = A1;
 
+//control parameters
+unsigned int pressureSetpoint = 50;
+unsigned int pressureError = 0;
+unsigned int controlGain = 0;
+unsigned int controlBias = 0;
+
+//control logic
+unsigned int outerEnvelope = 10;
+unsigned int innerEnvelope = 5;
+byte motorDirection = LOW;
+boolean controlON = false;
+
+//filtering pressure
+unsigned int pressureFiltered = 0;
+unsigned long filterTimeConst = 500; //in millis
+
 
 SystemStatus systemStatus = unknownStatus;
 SessionState sessionState = pendingState;
@@ -150,12 +166,33 @@ void sendControlJSON(String* property, String* value){
 
 //actuate
 void articulateActuators(){
+  //Update Error
+  if (pressureFiltered > pressureSetpoint) {
+  pressureError = pressureFiltered-pressureSetpoint;
+  motorDirection = HIGH;
+  }else{
+  pressureError = pressureSetpoint-pressureFiltered;
+  motorDirection = LOW;
+  }
+  
+  
   if (sessionState == activeState && systemStatus == goodStatus){
     //motor runs pump coninuously
-    //stopMotor
-    digitalWrite(motorRelayPin, HIGH);
+    //Determine if control is necessary
+    if (pressureError > outerEnvelope){controlON = true;}
+    if (pressureError < innerEnvelope){controlON = false;}
     
-    //now do your fancy solenoid control thang 
+    if (controlON){
+      //Run control loop to pull pressure back to setpoint
+    unsigned int controlAction = controlBias+controlGain*pressureError;
+    analogWrite(solenoidD2APin, controlAction); //What type to use for the PWM port?
+    digitalWrite(motorRelayPin, motorDirection);
+    
+    }else{
+      //Run without control, taking best data with motor off and valve closed
+    digitalWrite(motorRelayPin, LOW);
+    analogWrite(solenoidD2APin, 0);
+    }  
 
   }else{
     //stopMotor
@@ -172,17 +209,25 @@ void articulateActuators(){
 
 //read sesnor data
 void takeMeasurements() {
-  lastMeasurementMillis = millis();
+  //lastMeasurementMillis = millis(); Moving to processData function, need it for filtering (JI)
   
   pressureSensorValue = analogRead(pressureSensorA2DPin);//sin((1.0) * millis()/1000.0)*127 + 127; //or analogRead(pressureSensorA2DPin) //a pin #
   sonotubometryAmplitudeValue = sin((1.0) * millis()/5000.0)*127 + 127; //or analogRead(sonotubometryAmplitudeSensorA2DPin) //a pin #
+  
 };
 
 //process data 
 void processData() {
+  unsigned long dt = lastMeasurementMillis - millis();
+  pressureFiltered = pressureSensorValue*(dt/(filterTimeConstant+dt)) + pressureFiltered*(filterTimeConstant/(filterTimeConstant+dt));
+  lastMeasurementMillis = millis();
+  
+  
   //process data from takeMeasurements
   //detemrine whether an ESTOP is needed, or fault is occuring
   //make it easy for articulateActuators function, and *separate* the processing logic from the control logic as much as possible
+  
+  
 }
   
 //setup and startup
