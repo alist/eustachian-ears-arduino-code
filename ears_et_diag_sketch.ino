@@ -13,7 +13,7 @@
 
 // TEST COMMIT LINE FROM JACOB
 
-#include <SoftwareSerial.h>
+//#include <SoftwareSerial.h>
 #include "types.h"
 /*
 1: setup
@@ -45,7 +45,8 @@ int sonotubometryAmplitudeSensorA2DPin = A1;
 
 //control parameters
 unsigned int pressureSetpoint = 50;
-unsigned int pressureError = 0;
+unsigned int pressureError = 0; // Error used to set the control input
+unsigned int pressureFiltError = 0; // Error used to turn on the control
 unsigned int controlGain = 0;
 unsigned int controlBias = 0;
 
@@ -167,12 +168,19 @@ void sendControlJSON(String* property, String* value){
 
 //actuate
 void articulateActuators(){
-  //Update Error
+  //Update Filtered Error - used for turning ON control
   if (pressureFiltered > pressureSetpoint) {
-  pressureError = pressureFiltered-pressureSetpoint;
+  pressureFiltError = pressureFiltered-pressureSetpoint;
+  }else{
+  pressureFiltError = pressureSetpoint-pressureFiltered;
+  }
+  
+  //Update Pressure Sensor Error - used as the control variable
+  if (pressureSensorValue > pressureSetpoint) {
+  pressureError = pressureSensorValue-pressureSetpoint;
   pumpActivated = HIGH;
   }else{
-  pressureError = pressureSetpoint-pressureFiltered;
+  pressureError = pressureSetpoint-pressureSensorValue;
   pumpActivated = LOW;
   }
   
@@ -180,7 +188,7 @@ void articulateActuators(){
   if (sessionState == activeState && systemStatus == goodStatus){
     //motor runs pump coninuously
     //Determine if control is necessary
-    if (pressureError > outerEnvelope){controlON = true;}
+    if (pressureFiltError > outerEnvelope){controlON = true;}
     if (pressureError < innerEnvelope){controlON = false;}
     
     if (controlON){
@@ -188,6 +196,7 @@ void articulateActuators(){
     unsigned int controlAction = controlBias+controlGain*pressureError;
     analogWrite(solenoidD2APin, controlAction); //What type to use for the PWM port?
     digitalWrite(motorRelayPin, pumpActivated);
+    pressureFiltered = pressureSensorValue; // Reset filtered value to follow exact signal
     
     }else{
       //Run without control, taking best data with motor off and valve closed
@@ -220,7 +229,7 @@ void takeMeasurements() {
 //process data 
 void processData() {
   unsigned long dt = lastMeasurementMillis - millis();
-  pressureFiltered = pressureSensorValue*(dt/(filterTimeConstant+dt)) + pressureFiltered*(filterTimeConstant/(filterTimeConstant+dt));
+  pressureFiltered = (pressureSensorValue*dt)/(filterTimeConstant+dt) + (pressureFiltered*filterTimeConstant)/(filterTimeConstant+dt);
   lastMeasurementMillis = millis();
   
   
