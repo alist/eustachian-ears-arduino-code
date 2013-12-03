@@ -6,8 +6,8 @@ enum SystemStatus {
 
 enum SessionState{
   pendingState = 0,
-  estopState,
-  idleState,
+  estopState, //valve open, pump off
+  idleState, //valve open, pump off
   beginState,
   activeState,
   endState

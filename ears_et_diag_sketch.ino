@@ -50,10 +50,11 @@ unsigned int controlGain = 0;
 unsigned int controlBias = 0;
 
 //control logic
+//ESTOP envelope?
 unsigned int outerEnvelope = 10;
 unsigned int innerEnvelope = 5;
-byte motorDirection = LOW;
-boolean controlON = false;
+byte pumpActivated = LOW; //LOW= motor off , HIGH= on
+boolean controlON = false; //whether valve is enabled or not (false=not enabled)
 
 //filtering pressure
 unsigned int pressureFiltered = 0;
@@ -169,10 +170,10 @@ void articulateActuators(){
   //Update Error
   if (pressureFiltered > pressureSetpoint) {
   pressureError = pressureFiltered-pressureSetpoint;
-  motorDirection = HIGH;
+  pumpActivated = HIGH;
   }else{
   pressureError = pressureSetpoint-pressureFiltered;
-  motorDirection = LOW;
+  pumpActivated = LOW;
   }
   
   
@@ -186,7 +187,7 @@ void articulateActuators(){
       //Run control loop to pull pressure back to setpoint
     unsigned int controlAction = controlBias+controlGain*pressureError;
     analogWrite(solenoidD2APin, controlAction); //What type to use for the PWM port?
-    digitalWrite(motorRelayPin, motorDirection);
+    digitalWrite(motorRelayPin, pumpActivated);
     
     }else{
       //Run without control, taking best data with motor off and valve closed
