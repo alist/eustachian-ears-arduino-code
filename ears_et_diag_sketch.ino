@@ -35,7 +35,8 @@ unsigned int sonotubometryAmplitudeValue = 0;
 //interval between actions
 unsigned long articulationIntervalMillis = 5;//happening 200x a second 
 unsigned long measurementIntervalMillis = 10;
-unsigned long dataAcqIntervalMillis = 200;
+unsigned long activeStateDataAcqIntervalMillis = 50; //20hz
+unsigned long idleStateDataAcqIntervalMillis = 200; //5hz
 
 //need to speicify these
 int solenoidD2APin = D10; //unfortunately, this is a PWM, not a DAC
@@ -84,9 +85,17 @@ void loop(){
     lastArticulationMillis = currentMillis;
   }
   
-  if (currentMillis - lastDataAcqMillis > dataAcqIntervalMillis){
-    updateDataAcquisition(); 
-    lastDataAcqMillis = currentMillis;
+  //active vs idle state data acq
+  if (sessionState == activeState){
+    if (currentMillis - lastDataAcqMillis > activeStateDataAcqIntervalMillis){
+      updateDataAcquisition(); 
+      lastDataAcqMillis = currentMillis;
+    }
+  }else{
+    if (currentMillis - lastDataAcqMillis > idleStateDataAcqIntervalMillis){
+      updateDataAcquisition(); 
+      lastDataAcqMillis = currentMillis;
+    }
   }
   
   respondToRequests();
