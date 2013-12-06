@@ -45,22 +45,22 @@ int pressureSensorA2DPin = A0;
 int sonotubometryAmplitudeSensorA2DPin = A1;
 
 //control parameters
-unsigned int pressureSetpoint = 50;
-unsigned int pressureError = 0; // Error used to set the control input
-unsigned int pressureFiltError = 0; // Error used to turn on the control
-unsigned int controlGain = 0;
-unsigned int controlBias = 0;
+unsigned int pressureSetpoint = 500;
+unsigned int pressureError = 0; // Error used to set the control input //variable not param
+unsigned int pressureFiltError = 0; // Error used to turn on the control//variable not param
+double controlGain = 0.1;
+unsigned int controlBias = 174;
 
 //control logic
 //ESTOP envelope?
-unsigned int outerEnvelope = 10;
-unsigned int innerEnvelope = 5;
-byte pumpActivated = LOW; //LOW= motor off , HIGH= on
+unsigned int outerEnvelope = 300;
+unsigned int innerEnvelope = 100;
+byte pumpDisabled = LOW; //LOW= motor on , HIGH= off
 boolean controlON = false; //whether valve is enabled or not (false=not enabled)
 
 //filtering pressure
 unsigned int pressureFiltered = 0;
-unsigned long filterTimeConstant = 500; //in millis
+unsigned long filterTimeConstant = 1000; //in millis
 
 
 SystemStatus systemStatus = unknownStatus;
@@ -161,7 +161,7 @@ void updateDataAcquisition(){
  // String csvLabels = "sessionState , dataMillis ,pressure, sonotubometryAmplitude \n"
  // ="{ \"sessionState\": "  + String(sessionState) + ", \"dataMillis\":" + String(lastMeasurementMillis) + ", \"pressure\":" + String(pressureSensorValue) + , \"sonotubometryAmplitude\":" + String(sonotubometryAmplitudeValue) + "}"; //in JSON
  //we save to an SD card if we have one, but we'll write to serial1(BT) & log for now!
- debugLog (nextCSVEntry);
+ // debugLog (nextCSVEntry);
  //bluetooth!
  Serial1.print(nextCSVEntry); 
 }
@@ -187,10 +187,10 @@ void articulateActuators(){
   //Update Pressure Sensor Error - used as the control variable
   if (pressureSensorValue > pressureSetpoint) {
   pressureError = pressureSensorValue-pressureSetpoint;
-  pumpActivated = HIGH;
+  pumpDisabled = HIGH;
   }else{
   pressureError = pressureSetpoint-pressureSensorValue;
-  pumpActivated = LOW;
+  pumpDisabled = LOW;
   }
   
   
@@ -202,22 +202,33 @@ void articulateActuators(){
     
     if (controlON){
       //Run control loop to pull pressure back to setpoint
-    unsigned int controlAction = controlBias+controlGain*pressureError;
-    analogWrite(solenoidD2APin, controlAction); //What type to use for the PWM port?
-    digitalWrite(motorRelayPin, pumpActivated);
+    int controlAction = (double)controlBias+controlGain*pressureError;
+    
+    unsigned int controlActionPWMValue = min(255 - controlAction, 255);
+
+    analogWrite(solenoidD2APin, controlActionPWMValue); //What type to use for the PWM port?
+
+    String controlString = String(controlActionPWMValue);
+    debugLog ("solenoid, controlAction, pressureError, pressureFiltered: " + controlString + "," + String(controlAction) + "," + String(pressureError) + "," + String(pressureFiltered));
+
+    digitalWrite(motorRelayPin, pumpDisabled);
     pressureFiltered = pressureSensorValue; // Reset filtered value to follow exact signal
     
     }else{
+      debugLog ("nc-solenoid, pressureFiltered: " + String(255) + "," + String(pressureFiltered));
       //Run without control, taking best data with motor off and valve closed
-    digitalWrite(motorRelayPin, LOW);
-    analogWrite(solenoidD2APin, 0);
+    digitalWrite(motorRelayPin, HIGH); //this is disabling motor
+    analogWrite(solenoidD2APin, 255); //this closes the valve
     }  
 
-  }else{
+  }else{ //bad status
     //stopMotor
-    digitalWrite(motorRelayPin, LOW);
+    digitalWrite(motorRelayPin, HIGH);
+    
     //close solenoid
-    analogWrite(solenoidD2APin, 0);      
+      debugLog ("nc-solenoid, pressureFiltered: " + String(255) + "," + String(pressureFiltered));
+    analogWrite(solenoidD2APin, 255);  //this closes the valve
+
     if (sessionState == estopState || systemStatus == faultStatus){
         debugLog("waiting-- estopped or faulted"); 
     }
@@ -237,10 +248,8 @@ void takeMeasurements() {
 
 //process data 
 void processData() {
-  unsigned long dt = lastMeasurementMillis - millis();
-  pressureFiltered = (pressureSensorValue*dt)/(filterTimeConstant+dt) + (pressureFiltered*filterTimeConstant)/(filterTimeConstant+dt);
-  lastMeasurementMillis = millis();
-  
+  int dt = millis() - lastMeasurementMillis;
+  pressureFiltered = (pressureSensorValue*dt + pressureFiltered*filterTimeConstant)/(filterTimeConstant+dt);  
   
   //process data from takeMeasurements
   //detemrine whether an ESTOP is needed, or fault is occuring
