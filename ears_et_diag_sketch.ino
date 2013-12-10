@@ -39,8 +39,8 @@ unsigned long activeStateDataAcqIntervalMillis = 50; //20hz
 unsigned long idleStateDataAcqIntervalMillis = 200; //5hz
 
 //need to speicify these
-int solenoidD2APin = D10; //unfortunately, this is a PWM, not a DAC
-int motorRelayPin = D11;
+int solenoidD2APin = 6; //unfortunately, this is a PWM, not a DAC
+int motorRelayPin = 5;
 int pressureSensorA2DPin = A0;
 int sonotubometryAmplitudeSensorA2DPin = A1;
 
@@ -50,6 +50,7 @@ unsigned int pressureError = 0; // Error used to set the control input //variabl
 unsigned int pressureFiltError = 0; // Error used to turn on the control//variable not param
 double controlGain = 0.1;
 unsigned int controlBias = 174;
+unsigned int solenoidControlPWMValue = 0;
 
 //control logic
 //ESTOP envelope?
@@ -157,8 +158,8 @@ void respondToRequests(){
 
 //save the data somewhere
 void updateDataAcquisition(){
- String nextCSVEntry = String(sessionState) + "," + String(lastMeasurementMillis) + "," + String(pressureSensorValue) + "," + String(sonotubometryAmplitudeValue) + "\n";
- // String csvLabels = "sessionState , dataMillis ,pressure, sonotubometryAmplitude \n"
+ String nextCSVEntry = String(sessionState) + "," + String(lastMeasurementMillis) + "," + String(pressureSensorValue) + "," + String(solenoidControlPWMValue) + "," + String(pumpDisabled) + "\n";
+ // String csvLabels = "sessionState , dataMillis ,pressure, solenoidControlPWMValue,pumpDisabled \n"
  // ="{ \"sessionState\": "  + String(sessionState) + ", \"dataMillis\":" + String(lastMeasurementMillis) + ", \"pressure\":" + String(pressureSensorValue) + , \"sonotubometryAmplitude\":" + String(sonotubometryAmplitudeValue) + "}"; //in JSON
  //we save to an SD card if we have one, but we'll write to serial1(BT) & log for now!
  // debugLog (nextCSVEntry);
@@ -204,18 +205,17 @@ void articulateActuators(){
       //Run control loop to pull pressure back to setpoint
     int controlAction = (double)controlBias+controlGain*pressureError;
     
-    unsigned int controlActionPWMValue = min(255 - controlAction, 255);
+    solenoidControlPWMValue = min(255 - controlAction, 255);
 
-    analogWrite(solenoidD2APin, controlActionPWMValue); //What type to use for the PWM port?
+    analogWrite(solenoidD2APin, solenoidControlPWMValue); //What type to use for the PWM port?
 
-    String controlString = String(controlActionPWMValue);
-    debugLog ("solenoid, controlAction, pressureError, pressureFiltered: " + controlString + "," + String(controlAction) + "," + String(pressureError) + "," + String(pressureFiltered));
+    debugLog ("solenoid, pumpDisabled, pressureError, pressureFiltered: " + String(solenoidControlPWMValue) + "," + String(pumpDisabled) + "," + String(pressureError) + "," + String(pressureFiltered));
 
     digitalWrite(motorRelayPin, pumpDisabled);
     pressureFiltered = pressureSensorValue; // Reset filtered value to follow exact signal
     
     }else{
-      debugLog ("nc-solenoid, pressureFiltered: " + String(255) + "," + String(pressureFiltered));
+      debugLog ("nocntr-solenoid, pumpDisabled, pressureError, pressureFiltered: " + String(solenoidControlPWMValue) + "," + String(pumpDisabled) + "," + String(pressureError) + "," + String(pressureFiltered));
       //Run without control, taking best data with motor off and valve closed
     digitalWrite(motorRelayPin, HIGH); //this is disabling motor
     analogWrite(solenoidD2APin, 255); //this closes the valve
@@ -265,6 +265,9 @@ void setup()   {
   pinMode(solenoidD2APin, OUTPUT);
   pinMode(pressureSensorA2DPin, INPUT);
   pinMode(sonotubometryAmplitudeSensorA2DPin, INPUT);
+
+  // pinMode(5, OUTPUT);
+  // analogWrite(5, 127);  //this closes the valve
   
   // Set the baudrate of the Arduino
   Serial.begin(9600);
